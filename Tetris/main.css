@@ -1,0 +1,32 @@
+body{
+    background: black;
+}
+#wrapper
+{
+    position: relative;
+    top: 20;
+    width: 250px;
+    height: 500px;
+    margin: auto;
+    border: 5px rgb(100,100,100) solid;
+}
+#window
+{
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+}
+#bcanvas
+{
+    position: absolute;
+    top: 0;
+    left: 0;
+    z-index: 0;
+}
+#fcanvas
+{
+    position: absolute;
+    top: 0;
+    left: 0;
+    z-index: 1;
+}    
