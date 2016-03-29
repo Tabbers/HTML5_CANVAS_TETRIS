@@ -75,13 +75,15 @@ $(document).ready(function()
             //left
             case 37:
                 console.log("left");
-                if(!CheckCollision())currentBlockXY[0]--;
+                currentBlockXY[0]--;
+                if(CheckCollision() == "wleft")currentBlockXY[0]++;
                 currentBlock.setPosition(  currentBlockXY[0],  currentBlockXY[1]);
             break;
             //Right
             case 39:
                 console.log("right");
-               if(!CheckCollision()) currentBlockXY[0]++;
+                 currentBlockXY[0]++;
+                if(CheckCollision() == "wright")currentBlockXY[0]--;
                 currentBlock.setPosition(  currentBlockXY[0],  currentBlockXY[1]);
             break;
             //Up - rotate
@@ -93,7 +95,8 @@ $(document).ready(function()
             //Down - move down
             case 40:
                 console.log("down");
-                if(!CheckCollision()) currentBlockXY[1]++;
+                currentBlockXY[1]++;
+                if(CheckCollision() == "floor") currentBlockXY[1]--;
                 currentBlock.setPosition(  currentBlockXY[0],  currentBlockXY[1]);
             break;
         }
@@ -171,24 +174,35 @@ $(document).ready(function()
     //===============================
     //Collision
     //===============================
+    function CheckCollision()
+    {
+        var collision = CheckFloorAndWalls();
+        if(collision != "none") return collision;
+        
+        collision = CheckOtherBlocks();
+        if(collision != "none")   return collision;  
+       
+        return "none";
+    }
+    
     function CheckFloorAndWalls()
     {
         //Wallcheck
         for(var y = 0; y < 19; y++ )
         {
-           if(blocks[0 + 10*y] != 0) return true; 
-           if(blocks[9 + 10*y] != 0) return true; 
+           if(blocks[0 + 10*y] != 0) return "wleft"; 
+           if(blocks[9 + 10*y] != 0) return "wright"; 
         }
         for(var x=0; x <10; x++)
         {
-           if(blocks[x + 10*19] != 0) return true; 
+           if(blocks[x + 10*19] != 0) return "floor"; 
         }
-        return false;
+        return "none";
     }
     
     function CheckOtherBlocks()
     {
-         return false;
+         return "none";
     }
     //===============================
     //StonesFUNCTIONS
@@ -220,16 +234,12 @@ $(document).ready(function()
         currentBlockXY[0] = currentBlock.getX();
         currentBlockXY[1] = currentBlock.getY();
         
-        if(!CheckCollision()) currentBlockXY[1]++;
+        
+        currentBlockXY[1]++;        
+        if(CheckCollision() == "floor") currentBlockXY[1]--;
         currentBlock.setPosition(currentBlockXY[0],currentBlockXY[1]);
         
       
-    }
-    function CheckCollision()
-    {
-        if(CheckFloorAndWalls()) return true;
-        if(CheckOtherBlocks())   return true;  
-        return false;
     }
     function SpawnBlock()
     {
