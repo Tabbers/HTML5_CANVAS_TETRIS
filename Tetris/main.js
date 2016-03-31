@@ -5,11 +5,17 @@
 $(document).ready(function()
 {
     //GLOBALS
+    var lastFrameTimeMs = 0; // The last time the loop was run
+    var maxFPS = 60; // The maximum FPS we want to allow
+    var delta=0;
+    
+    
+    var pause = false;
+    
     var fc = document.getElementById("fcanvas");
     var fctx = fc.getContext("2d");
     var bc = document.getElementById("bcanvas");
     var bctx = bc.getContext("2d");
-    var date = new Date();
     //GameGLOBALS
     var drawFrame;
     //Houses frame time function
@@ -23,11 +29,13 @@ $(document).ready(function()
     
     var blockGravity;
     var blocktimer = 1000;
+    var collissionFloor = false;
+    var currentBlocktime =0;
     
     //Calls
    
     Setup();
-    game = setInterval(Update,16); 
+    Entrypoint();
     //===============================
     //MAINFUNCTIONS
     //===============================
@@ -48,56 +56,67 @@ $(document).ready(function()
         SpawnBlock();
         DrawBackground();
     }
+    function Entrypoint()
+    {
+        Setup();
+        requestAnimationFrame(mainLoop);
+    }
+    function mainLoop(timestamp) {
+    if (timestamp < lastFrameTimeMs + (1000 / maxFPS)) {
+        requestAnimationFrame(mainLoop);
+        return;
+    }
+    if(!pause)
+    {
+        Update();
+    }
+    delta = (timestamp - lastFrameTimeMs);
+    lastFrameTimeMs = timestamp;
+    requestAnimationFrame(mainLoop)
+}
+
     function Update()
     {
+        currentBlockXY[0] = currentBlock.getX();
+        currentBlockXY[1] = currentBlock.getY();
         DrawBlockGrid();
-        BlockGrid();
+        BlockGrid(false);
         drawFrame = false;
-        
-        if(end)
-        {
-            clearInterval(game);
-            clearInterval(blockGravity);
-        }     
     }
     //===============================
     //Input
     //===============================
     $(document).keyup(function(event){
-        
-       
-        
-        currentBlockXY[0] = currentBlock.getX();
-        currentBlockXY[1] = currentBlock.getY();
-        console.log("pos: "+currentBlockXY[0] + currentBlockXY[1]);
         switch(event.which)
         {
             //left
             case 37:
                 console.log("left");
                 currentBlockXY[0]--;
-                if(CheckCollision() == "wleft")currentBlockXY[0]++;
+                if(CheckCollision(currentBlockXY[0],currentBlockXY[1]) == "wleft")currentBlockXY[0]++;
                 currentBlock.setPosition(  currentBlockXY[0],  currentBlockXY[1]);
             break;
             //Right
             case 39:
                 console.log("right");
                  currentBlockXY[0]++;
-                if(CheckCollision() == "wright")currentBlockXY[0]--;
+                if(CheckCollision(currentBlockXY[0],currentBlockXY[1]) == "wright")currentBlockXY[0]--;
                 currentBlock.setPosition(  currentBlockXY[0],  currentBlockXY[1]);
             break;
             //Up - rotate
             case 38:  
-                console.log("rotate"); 
-                currentRotation++;
-                if(currentRotation > 4) currentRotation = 1;
+                if(CheckCollision(currentBlockXY[0],currentBlockXY[1]) == "none")
+                {
+                    console.log("rotate"); 
+                    currentRotation++;
+                    if(currentRotation > 4) currentRotation = 0;
+                    currentBlock.setPosition(  currentBlockXY[0],  currentBlockXY[1]);
+                }
             break;
             //Down - move down
             case 40:
                 console.log("down");
-                currentBlockXY[1]++;
-                if(CheckCollision() == "floor") currentBlockXY[1]--;
-                currentBlock.setPosition(  currentBlockXY[0],  currentBlockXY[1]);
+                currentBlocktime = 0;
             break;
         }
     });
@@ -131,8 +150,7 @@ $(document).ready(function()
     //===============================
      function DrawBlockGrid()
     {
-        
-        fctx.clearRect((currentBlock.getX()-1)*25,(currentBlock.getY()-1)*25,150,150);
+        fctx.clearRect((currentBlock.getX()-1)*25,(currentBlock.getY()-1)*25,125,125);
         for(var x =0; x < 10; ++x)
         {
             for(var y = 0; y < 20;++y)
@@ -140,30 +158,37 @@ $(document).ready(function()
               switch(blocks[x + 10*y])
                {
                    case 1:
+                   case 8:
                         fctx.fillStyle   = '#ff0000';
                         fctx.fillRect(x*25,y*25,25,25);  
                         break;
                    case 2:
+                   case 9:
                         fctx.fillStyle   = '#00ff00'; 
                         fctx.fillRect(x*25,y*25,25,25); 
                         break;
                    case 3:
+                   case 10:
                         fctx.fillStyle   = '#0000ff'; 
                         fctx.fillRect(x*25,y*25,25,25); 
                         break;
                    case 4:
+                   case 11:
                         fctx.fillStyle   = '#ff00ff'; 
                         fctx.fillRect(x*25,y*25,25,25); 
                         break;
                    case 5:
+                   case 12:
                         fctx.fillStyle   = '#ffff00'; 
                         fctx.fillRect(x*25,y*25,25,25); 
                         break;
                    case 6:
+                   case 13:
                         fctx.fillStyle   = '#00ffff'; 
                         fctx.fillRect(x*25,y*25,25,25); 
                         break;
                    case 7:
+                   case 14:
                         fctx.fillStyle   = '#ffffff';
                         fctx.fillRect(x*25,y*25,25,25);  
                         break;
@@ -174,14 +199,15 @@ $(document).ready(function()
     //===============================
     //Collision
     //===============================
-    function CheckCollision()
+    function CheckCollision(_x, _y)
     {
+        ApplyBlock(false);
         var collision = CheckFloorAndWalls();
         if(collision != "none") return collision;
+        RemoveBlock();
         
-        collision = CheckOtherBlocks();
-        if(collision != "none")   return collision;  
-       
+        collision = CheckOtherBlocks(_x,_y);
+        if(collision != "none")   return collision;         
         return "none";
     }
     
@@ -190,56 +216,107 @@ $(document).ready(function()
         //Wallcheck
         for(var y = 0; y < 19; y++ )
         {
-           if(blocks[0 + 10*y] != 0) return "wleft"; 
-           if(blocks[9 + 10*y] != 0) return "wright"; 
+           if(blocks[0 + 10*y] > 0 && blocks[0 + 10*y] < 8) return "wleft"; 
+           if(blocks[9 + 10*y] > 0 && blocks[9 + 10*y] < 8) return "wright"; 
         }
         for(var x=0; x <10; x++)
         {
-           if(blocks[x + 10*19] != 0) return "floor"; 
+           if(blocks[x + 10*19] > 0 && blocks[x + 10*19] < 8) return "floor"; 
         }
         return "none";
     }
     
-    function CheckOtherBlocks()
+    function CheckOtherBlocks(_x,_y)
     {
+         var arraytoApply = currentBlock.getGrid(currentRotation);
+         var blockstate = 0;
+         var currentArrayValue = 0;
+         for(var y = 0; y < 4; y++ )
+         {
+            for(var x = 0; x < 4; x++ )
+            {
+                currentArrayValue = arraytoApply[x+4*y]
+                blockstate = blocks[(_x+x)+10*(_y+y)] + currentArrayValue;
+                if(blockstate > currentArrayValue)
+                { 
+                    return "block";
+                }
+            }    
+         }
+        
          return "none";
     }
     //===============================
     //StonesFUNCTIONS
     //===============================
-    function BlockGrid()
+    function BlockGrid( passive)
+    {         
+         RemoveBlock();
+         MoveBlockDown();
+         ApplyBlock(false);   
+    }
+    function RemoveBlock()
     {
-         var arraytoApply = currentBlock.getGrid(currentRotation);
-         
-         for(var x = -1; x < 5; x++ )
+          for(var x = -1; x < 4; x++ )
          {
-            for(var y = -1; y < 5; y++ )
+            for(var y = -1; y < 4; y++ )
             {
-                blocks[(currentBlock.getX()+x)+10*(currentBlock.getY()+y)] = 0;
+               if(blocks[(currentBlockXY[0]+x)+10*(currentBlockXY[1]+y)] < 8) 
+               {
+                    blocks[(currentBlockXY[0]+x)+10*(currentBlockXY[1]+y)] = 0;
+               }
             }
          }
-         
+    }
+    function ApplyBlock(passive)
+    {
+         var arraytoApply = currentBlock.getGrid(currentRotation);
          for(var x = 0; x < 4; x++ )
          {
             for(var y = 0; y < 4; y++ )
             {
-                blocks[(currentBlock.getX()+x)+10*(currentBlock.getY()+y)] =arraytoApply[x+4*y];
+               if(!passive)
+               {
+                  if(blocks[(currentBlockXY[0]+x)+10*(currentBlockXY[1]+y)] < 8) 
+                  {
+                    blocks[(currentBlockXY[0]+x)+10*(currentBlockXY[1]+y)] = arraytoApply[x+4*y];
+                  }
+               } 
+               else
+               {
+                   if(arraytoApply[x+4*y] != 0)
+                        blocks[(currentBlockXY[0]+x)+10*(currentBlockXY[1]+y)] = arraytoApply[x+4*y]+7;
+               }         
             }    
          }
     }
-    
     function MoveBlockDown()
     {
-        //var collision = CheckCollision();
-        currentBlockXY[0] = currentBlock.getX();
-        currentBlockXY[1] = currentBlock.getY();
+        currentBlocktime -= delta;
         
-        
-        currentBlockXY[1]++;        
-        if(CheckCollision() == "floor") currentBlockXY[1]--;
-        currentBlock.setPosition(currentBlockXY[0],currentBlockXY[1]);
-        
-      
+        if(currentBlocktime <= 0)
+        {            
+            currentBlockXY[1]++; 
+            var collision = CheckCollision(currentBlockXY[0],currentBlockXY[1]);       
+            if(collissionFloor == true)
+            {
+                currentBlockXY[1]--;
+                collissionFloor = false;
+                BlockGrid(true);
+                currentBlock = null;
+                SpawnBlock();
+                return;
+            }
+            
+            if(collision == "floor" || 
+               collision == "block")
+            { 
+                currentBlockXY[1]--;
+                collissionFloor = true;
+            }
+            currentBlock.setPosition(currentBlockXY[0],currentBlockXY[1]);  
+            currentBlocktime = blocktimer;
+        }
     }
     function SpawnBlock()
     {
@@ -248,38 +325,42 @@ $(document).ready(function()
             var stone = Math.floor((Math.random() * 7) + 1);
             switch (stone) {
                 case 1:
-                    currentBlock = new LineBlock(6,0,stone);
+                    currentBlock = new LineBlock(3,0,stone);
                     break;
                 case 2:
-                    currentBlock = new LBlock(6,0,stone);
+                    currentBlock = new LBlock(3,0,stone);
                     break;
                 case 3:
-                    currentBlock = new ReverseLBlock(6,0,stone);
+                    currentBlock = new ReverseLBlock(3,0,stone);
                     break;
                 case 4:
-                    currentBlock = new SquiggilyBlock(6,0,stone);
+                    currentBlock = new SquiggilyBlock(3,0,stone);
                     break;
                 case 5:
-                    currentBlock = new ReverseSquiggilyBlock(6,0,stone);
+                    currentBlock = new ReverseSquiggilyBlock(3,0,stone);
                     break;
                 case 6:
-                    currentBlock = new RectangleBlock(6,0,stone);
+                    currentBlock = new RectangleBlock(3,0,stone);
                     break;
                 case 7:
-                    currentBlock = new TBlock(6,0,stone);
+                    currentBlock = new TBlock(3,0,stone);
                     break;
                 default:
                     
             } 
         }
-        blockGravity = setInterval(MoveBlockDown,blocktimer);
+       currentBlocktime = 0;
     }
     // ====
     function LineBlock(x,y,color)
-    {    
+    {   
         var x = x;
         var y = y;
         var c = color;
+        this.getColor = function()
+        {
+            return color;
+        };
         this.getX = function()
         {
             return x;
@@ -331,6 +412,10 @@ $(document).ready(function()
        var x = x;
        var y = y;
        var c = color;
+       this.getColor = function()
+       {
+           return color;
+       };
        this.getX = function()
         {
             return x;
@@ -379,9 +464,13 @@ $(document).ready(function()
     // ===
     function ReverseLBlock(x,y,color)
     {
-        var x = x;
+       var x = x;
        var y = y;
        var c = color;
+       this.getColor = function()
+       {
+           return color;
+       };
         this.getX = function()
         {
             return x;
@@ -433,6 +522,10 @@ $(document).ready(function()
        var x = x;
        var y = y;
        var c = color;
+       this.getColor = function()
+       {
+           return color;
+       };
         this.getX = function()
         {
             return x;
@@ -484,6 +577,10 @@ $(document).ready(function()
        var x = x;
        var y = y;
        var c = color;
+       this.getColor = function()
+       {
+           return color;
+       };
         this.getX = function()
         {
             return x;
@@ -535,6 +632,10 @@ $(document).ready(function()
        var x = x;
        var y = y;
        var c = color;
+       this.getColor = function()
+       {
+           return color;
+       };
        this.getX = function()
         {
             return x;
@@ -586,6 +687,10 @@ $(document).ready(function()
        var x = x;
        var y = y;
        var c = color;
+        this.getColor = function()
+       {
+           return color;
+       };
        this.getX = function()
         {
             return x;
