@@ -4,17 +4,25 @@
 */
 $(document).ready(function()
 {
+    //HTML OBJECTS
+    var Overlay = document.getElementById("gameOver");
+    
+    //AUDIO
+    
+    var audio = new Audio();
+    audio.loop = true;
     //GLOBALS
     var lastFrameTimeMs = 0; // The last time the loop was run
     var maxFPS = 60; // The maximum FPS we want to allow
-    var delta=0;
+    var delta  = 0;
     
     
     var pause = false;
+    var reset = false;
     
-    var fc = document.getElementById("fcanvas");
+    var fc   = document.getElementById("fcanvas");
     var fctx = fc.getContext("2d");
-    var bc = document.getElementById("bcanvas");
+    var bc   = document.getElementById("bcanvas");
     var bctx = bc.getContext("2d");
     //GameGLOBALS
     var drawFrame;
@@ -24,15 +32,18 @@ $(document).ready(function()
     var end = false;
     var blocks = new Array(200);
     var currentBlock;
-    var currentBlockXY = [0,0];
+    var currentBlockXY  = [0,0];
     var currentRotation = 1;
     
     var blockGravity;
     var blocktimer = 1000;
-    var collissionFloor = false;
-    var currentBlocktime =0;
+    var collissionFloor  = false;
+    var currentBlocktime = 0;
     var linesToClear = new Array(20);
+    var fadeoutstage  = new Array(20);
     //Calls
+    
+    var KeyDown = false;
    
     Setup();
     Entrypoint();
@@ -41,6 +52,9 @@ $(document).ready(function()
     //===============================
     function Setup()
     {
+        audio.src = "sound/tetris.mp3";
+        audio.play();
+        Overlay.className ="invisible"; 
         fc.clientWidth = 250;
         fc.clientWidth = 500;
         
@@ -56,7 +70,9 @@ $(document).ready(function()
         for(var i =0; i < 20; i++)
         {
             linesToClear[i] = false;
+            fadeoutstage[i]  = 60;
         }
+        console.log("Setup");
         SpawnBlock();
         DrawBackground();
     }
@@ -67,6 +83,9 @@ $(document).ready(function()
     }
     function Reset()
     {
+        collissionFloor = false;
+        currentBlocktime = 1000;
+        Overlay.className ="invisible"; 
         currentBlock = null;
         currentBlockXY = [0,0];
         for(var i =0; i < 200; i++)
@@ -76,8 +95,10 @@ $(document).ready(function()
         for(var i =0; i < 20; i++)
         {
             linesToClear[i] = false;
+            fadeoutstage[i]  = 60;
         }
         RedrawAll();
+        console.log("reset");
         SpawnBlock();
     }
     function mainLoop(timestamp) 
@@ -85,6 +106,11 @@ $(document).ready(function()
         if (timestamp < lastFrameTimeMs + (1000 / maxFPS)) {
             requestAnimationFrame(mainLoop);
             return;
+        }
+        if(reset)
+        {
+            Reset();
+            reset = false;
         }
         if(!pause)
         {
@@ -101,21 +127,48 @@ $(document).ready(function()
         currentBlockXY[1] = currentBlock.getY();
         DrawBlockGrid();
         BlockGrid(false);
+        if(KeyDown)
+        {
+           currentBlocktime -= 200;
+        }
         MoveBlockDown();
         LineCheck(currentBlockXY[0], currentBlockXY[1]);
+        currentBlock.setPosition(currentBlockXY[0],currentBlockXY[1]);  
         drawFrame = false;
     }
     function GameOver()
     {
-         for(var x = 0; x < 10; ++x)
+        if(!pause)
         {
-           if(blocks[x] > 7 && blocks[x+10*1] > 7) pause = true;
+            for(var x = 0; x < 10; ++x)
+            {
+                if(blocks[x+10] > 0 && blocks[x+20] > 7)
+                {
+                    
+                    console.log("gameover");
+                    pause = true;
+                    Overlay.className ="visible"; 
+                } 
+            }
         }
                   
     }
     //===============================
     //Input
     //===============================
+    $(document).keydown(function(event)
+    {
+        switch(event.which)
+        {
+           case 40:
+                if(!pause)
+                {
+                    KeyDown = true;
+                    console.log("keydown");
+                }
+           break; 
+        }    
+    });
     $(document).keyup(function(event){
         switch(event.which)
         {
@@ -126,7 +179,7 @@ $(document).ready(function()
                     console.log("left");
                     currentBlockXY[0]--;
                     if(CheckWalls(currentBlockXY[0],currentBlockXY[1]) == "wleft") currentBlockXY[0]++;
-                    if(CheckOtherBlocks(currentBlockXY[0],currentBlockXY[1]) == "block") currentBlockXY[0]--;
+                    if(CheckBlocksLeft(currentBlockXY[0],currentBlockXY[1]) == "block") currentBlockXY[0]++;
                     currentBlock.setPosition(  currentBlockXY[0],  currentBlockXY[1]);
                 }
             break;
@@ -137,7 +190,7 @@ $(document).ready(function()
                     console.log("right");
                     currentBlockXY[0]++;
                     if(CheckWalls(currentBlockXY[0],currentBlockXY[1]) == "wright")currentBlockXY[0]--;
-                    if(CheckOtherBlocks(currentBlockXY[0],currentBlockXY[1]) == "block") currentBlockXY[0]++;
+                    if(CheckBlocksRight(currentBlockXY[0],currentBlockXY[1]) == "block") currentBlockXY[0]--;
                     currentBlock.setPosition(  currentBlockXY[0],  currentBlockXY[1]);
                 }
             break;
@@ -155,14 +208,16 @@ $(document).ready(function()
             case 40:
                 if(!pause)
                 {
+                     KeyDown = false;
                     console.log("down");
                     currentBlocktime = 0;
                 }
+             break;
              case 13:
                 if(pause)
                 {
                     pause = !pause;
-                    Reset();
+                    reset = true;
                 }
             break;
         }
@@ -195,14 +250,61 @@ $(document).ready(function()
     //===============================
     //BlockHandlers
     //===============================
+    function RedrawLine(y,alpha)
+    {
+       fctx.clearRect(0,y*25,250,25);
+       fctx.globalAlpha = alpha;
+       for(var x = 0; x < 10; ++x)
+       {
+            switch(blocks[x + 10*y])
+            {
+                case 1:
+                case 8:
+                    fctx.fillStyle   = '#ff0000';
+                    fctx.fillRect(x*25,y*25,25,25);  
+                    break;
+                case 2:
+                case 9:
+                    fctx.fillStyle   = '#00ff00'; 
+                    fctx.fillRect(x*25,y*25,25,25); 
+                    break;
+                case 3:
+                case 10:
+                    fctx.fillStyle   = '#0000ff'; 
+                    fctx.fillRect(x*25,y*25,25,25); 
+                    break;
+                case 4:
+                case 11:
+                    fctx.fillStyle   = '#ff00ff'; 
+                    fctx.fillRect(x*25,y*25,25,25); 
+                    break;
+                case 5:
+                case 12:
+                    fctx.fillStyle   = '#ffff00'; 
+                    fctx.fillRect(x*25,y*25,25,25); 
+                    break;
+                case 6:
+                case 13:
+                    fctx.fillStyle   = '#00ffff'; 
+                    fctx.fillRect(x*25,y*25,25,25); 
+                    break;
+                case 7:
+                case 14:
+                    fctx.fillStyle   = '#ffffff';
+                    fctx.fillRect(x*25,y*25,25,25);  
+                    break;
+            }           
+       }
+       fctx.globalAlpha = 1;
+    }
     function RedrawAll()
     {
-        fctx.clearRect(0,0,250,500)
+        fctx.clearRect(0,0,250,500);
         Draw(); 
     }
     function DrawBlockGrid()
     {
-        fctx.clearRect(0,(currentBlock.getY()-1)*25,250,125);
+        fctx.clearRect(0,(currentBlock.getY()-2)*25,250,150);
         Draw();
     }
     function Draw()
@@ -271,7 +373,6 @@ $(document).ready(function()
             }           
         }
         ClearLine();
-        RedrawAll();
     }
     function ClearLine()
     {
@@ -279,11 +380,22 @@ $(document).ready(function()
         {
             if(linesToClear[i])
             {
-                RemoveBlocksFormLine(i);
-                linesToClear[i] = false;
+                FadeOut(i)
+                if(fadeoutstage[i]< 0.001)
+                {
+                    RemoveBlocksFormLine(i);
+                    linesToClear[i] = false;
+                    fadeoutstage[i]  = 60;
+                    RedrawAll();
+                }
             }
-        }
-        
+        }  
+    }
+    function FadeOut(y)
+    {
+        fadeoutstage[y]--;
+        var alpha = fadeoutstage[y]/30;
+        RedrawLine(y,alpha)
     }
     function RemoveBlocksFormLine(_y)
     {
@@ -324,7 +436,7 @@ $(document).ready(function()
     }
     function CheckFloor(_x,_y)
     {
-         var blockstate   = 0;
+        var blockstate   = 0;
         var index=0;
         for(var x = 0; x < 4; x++ )
         {
@@ -332,6 +444,7 @@ $(document).ready(function()
             blockstate =  blocks[index];
             if(blockstate > 0 && blockstate < 8)
             { 
+                console.log("floor");
                 return "floor";
             }
         } 
@@ -347,6 +460,7 @@ $(document).ready(function()
             blockstate =  blocks[index];
             if(blockstate > 0)
             { 
+                console.log("left");
                 return "wleft";
             }
         }
@@ -357,6 +471,7 @@ $(document).ready(function()
             blockstate =  blocks[index];
             if(blockstate > 0)
             { 
+                console.log("rights");
                 return "wright";
             }
         }
@@ -375,29 +490,76 @@ $(document).ready(function()
     
     function CheckOtherBlocks(_x,_y)
     {
-         var arraytoApply = currentBlock.getGrid(currentRotation);
+        var collision = "none";
+        
+        collision = CheckBlocksDown(_x,_y);
+        if(collision != "none") return collision;
+        
+        collision = CheckBlocksRight(_x,_y);
+        if(collision != "none") return collision;
+        
+        collision = CheckBlocksLeft(_x,_y);
+        if(collision != "none") return collision;
+        
+        return "none";
+    }
+    function CheckBlocksDown(_x,_y)
+    {
          var blockstate = 0;
          var blockstate2 = 0;
-         var currentArrayValue = 0;
-         var index  = 0;
-         var index2 = 0;
          for(var y = 0; y < 4; y++ )
          {
             for(var x = 0; x < 4; x++ )
             {
-                index2=(_x+x)+10*(_y+y);
-                index =(_x+x)+10*(_y+(y+1));
-                console.log(index);
-                console.log(index2);
-                blockstate = blocks[index];
-                blockstate2 = blocks[index2];
-                if(blockstate > 7 && blockstate2 < 8 && blockstate2 > 0)
+                blockstate = blocks[(_x+x)+10*(_y+y)];
+                blockstate2 = blocks[(_x+x)+10*(_y+(y+1))];
+                if(blockstate2 > 7 && blockstate < 8 && blockstate > 0)
                 { 
+                    console.log("dblock");
                     return "block";
                 }
+ 
             }
          }           
          return "none";
+    }
+    function CheckBlocksRight(_x,_y)
+    {
+         var blockstate  = 0;
+         var blockstate2 = 0;
+         for(var y = 0; y < 4; y++ )
+         {
+            for(var x = 0; x < 4; x++ )
+            {
+                blockstate = blocks[(_x+(x+1))+10*(_y+y)];
+                blockstate2 = blocks[(_x+x)+10*(_y+y)];
+                if(blockstate > 7 && blockstate2 < 8 && blockstate2 > 0)
+                { 
+                    console.log("rblock");
+                    return "block";
+                }
+            }
+         }
+         return "none";
+    }
+    function CheckBlocksLeft(_x,_y)
+    {
+         var blockstate  = 0;
+         var blockstate2 = 0;
+         for(var y = 0; y < 4; y++ )
+         {
+            for(var x = 0; x < 4; x++ )
+            {
+                blockstate  = blocks[(_x+(x-1))+10*(_y+y)];
+                blockstate2 = blocks[(_x+x)+10*(_y+y)];
+                if(blockstate > 7 && blockstate2 < 8 && blockstate2 > 0)
+                { 
+                    console.log("lblock");
+                    return "block";
+                }
+            }
+         }
+         return "none";   
     }
     //===============================
     //StonesFUNCTIONS
@@ -409,9 +571,9 @@ $(document).ready(function()
     }
     function RemoveBlock()
     {
-          for(var x = -1; x < 4; x++ )
+          for(var x = 0; x < 10; x++ )
          {
-            for(var y = -1; y < 4; y++ )
+            for(var y = -2; y < 6; y++ )
             {
                if(blocks[(currentBlockXY[0]+x)+10*(currentBlockXY[1]+y)] < 8) 
                {
@@ -449,8 +611,6 @@ $(document).ready(function()
         if(currentBlocktime <= 0)
         {            
             currentBlockXY[1]++; 
-            var collision = CheckCollision(currentBlockXY[0],currentBlockXY[1]); 
-            console.log(collision);      
             if(collissionFloor == true)
             {
                 currentBlockXY[1]--;
@@ -461,13 +621,12 @@ $(document).ready(function()
                 return;
             }
             
-            if(collision == "floor" || 
-               collision == "block")
+            if(CheckFloor(currentBlockXY[0],currentBlockXY[1]) == "floor" || 
+               CheckBlocksDown(currentBlockXY[0],currentBlockXY[1]) == "block")
             { 
                 currentBlockXY[1]--;
                 collissionFloor = true;
             }
-            currentBlock.setPosition(currentBlockXY[0],currentBlockXY[1]);  
             currentBlocktime = blocktimer;
             GameOver(currentBlockXY[0],currentBlockXY[1]);
         }
@@ -501,11 +660,11 @@ $(document).ready(function()
                     break;
                 default:
                     
-            } 
+            }
+            currentBlockXY=[3,0];
+            currentBlocktime = 1000; 
+            console.log("SpawnBlock");
         }
-        currentBlockXY=[3,0];
-        
-       currentBlocktime = 1000;
     }
     // ====
     function LineBlock(x,y,color)
