@@ -31,7 +31,7 @@ $(document).ready(function()
     var blocktimer = 1000;
     var collissionFloor = false;
     var currentBlocktime =0;
-    
+    var linesToClear = new Array(20);
     //Calls
    
     Setup();
@@ -53,6 +53,10 @@ $(document).ready(function()
         {
             blocks[i] = 0;
         }
+        for(var i =0; i < 20; i++)
+        {
+            linesToClear[i] = false;
+        }
         SpawnBlock();
         DrawBackground();
     }
@@ -61,19 +65,35 @@ $(document).ready(function()
         Setup();
         requestAnimationFrame(mainLoop);
     }
-    function mainLoop(timestamp) {
-    if (timestamp < lastFrameTimeMs + (1000 / maxFPS)) {
-        requestAnimationFrame(mainLoop);
-        return;
-    }
-    if(!pause)
+    function Reset()
     {
-        Update();
+        currentBlock = null;
+        currentBlockXY = [0,0];
+        for(var i =0; i < 200; i++)
+        {
+            blocks[i] = 0;
+        }
+        for(var i =0; i < 20; i++)
+        {
+            linesToClear[i] = false;
+        }
+        RedrawAll();
+        SpawnBlock();
     }
-    delta = (timestamp - lastFrameTimeMs);
-    lastFrameTimeMs = timestamp;
-    requestAnimationFrame(mainLoop)
-}
+    function mainLoop(timestamp) 
+    {
+        if (timestamp < lastFrameTimeMs + (1000 / maxFPS)) {
+            requestAnimationFrame(mainLoop);
+            return;
+        }
+        if(!pause)
+        {
+            Update();
+        }
+        delta = (timestamp - lastFrameTimeMs);
+        lastFrameTimeMs = timestamp;
+        requestAnimationFrame(mainLoop)
+    }
 
     function Update()
     {
@@ -81,7 +101,17 @@ $(document).ready(function()
         currentBlockXY[1] = currentBlock.getY();
         DrawBlockGrid();
         BlockGrid(false);
+        MoveBlockDown();
+        LineCheck(currentBlockXY[0], currentBlockXY[1]);
         drawFrame = false;
+    }
+    function GameOver()
+    {
+         for(var x = 0; x < 10; ++x)
+        {
+           if(blocks[x] > 7 && blocks[x+10*1] > 7) pause = true;
+        }
+                  
     }
     //===============================
     //Input
@@ -91,32 +121,49 @@ $(document).ready(function()
         {
             //left
             case 37:
-                console.log("left");
-                currentBlockXY[0]--;
-                if(CheckCollision(currentBlockXY[0],currentBlockXY[1]) == "wleft")currentBlockXY[0]++;
-                currentBlock.setPosition(  currentBlockXY[0],  currentBlockXY[1]);
+                if(!pause)
+                {
+                    console.log("left");
+                    currentBlockXY[0]--;
+                    if(CheckWalls(currentBlockXY[0],currentBlockXY[1]) == "wleft") currentBlockXY[0]++;
+                    if(CheckOtherBlocks(currentBlockXY[0],currentBlockXY[1]) == "block") currentBlockXY[0]--;
+                    currentBlock.setPosition(  currentBlockXY[0],  currentBlockXY[1]);
+                }
             break;
             //Right
             case 39:
-                console.log("right");
-                 currentBlockXY[0]++;
-                if(CheckCollision(currentBlockXY[0],currentBlockXY[1]) == "wright")currentBlockXY[0]--;
-                currentBlock.setPosition(  currentBlockXY[0],  currentBlockXY[1]);
+                if(!pause)
+                {
+                    console.log("right");
+                    currentBlockXY[0]++;
+                    if(CheckWalls(currentBlockXY[0],currentBlockXY[1]) == "wright")currentBlockXY[0]--;
+                    if(CheckOtherBlocks(currentBlockXY[0],currentBlockXY[1]) == "block") currentBlockXY[0]++;
+                    currentBlock.setPosition(  currentBlockXY[0],  currentBlockXY[1]);
+                }
             break;
             //Up - rotate
             case 38:  
-                if(CheckCollision(currentBlockXY[0],currentBlockXY[1]) == "none")
+                if(!pause && CheckCollision(currentBlockXY[0],currentBlockXY[1]) == "none")
                 {
                     console.log("rotate"); 
                     currentRotation++;
-                    if(currentRotation > 4) currentRotation = 0;
+                    if(currentRotation > 4) currentRotation = 1;
                     currentBlock.setPosition(  currentBlockXY[0],  currentBlockXY[1]);
                 }
             break;
             //Down - move down
             case 40:
-                console.log("down");
-                currentBlocktime = 0;
+                if(!pause)
+                {
+                    console.log("down");
+                    currentBlocktime = 0;
+                }
+             case 13:
+                if(pause)
+                {
+                    pause = !pause;
+                    Reset();
+                }
             break;
         }
     });
@@ -148,9 +195,18 @@ $(document).ready(function()
     //===============================
     //BlockHandlers
     //===============================
-     function DrawBlockGrid()
+    function RedrawAll()
     {
-        fctx.clearRect((currentBlock.getX()-1)*25,(currentBlock.getY()-1)*25,125,125);
+        fctx.clearRect(0,0,250,500)
+        Draw(); 
+    }
+    function DrawBlockGrid()
+    {
+        fctx.clearRect(0,(currentBlock.getY()-1)*25,250,125);
+        Draw();
+    }
+    function Draw()
+    {
         for(var x =0; x < 10; ++x)
         {
             for(var y = 0; y < 20;++y)
@@ -197,32 +253,123 @@ $(document).ready(function()
         }   
     }
     //===============================
+    //Scoring
+    //===============================
+    function LineCheck(_x, _y)
+    {
+        var blocksInLine = 10; 
+        for(var y = 0; y < 20; y++ )
+        {
+            blocksInLine = 10;
+            for(var x = 0; x < 10; x++ )
+            {
+                if(blocks[x+10*y] >7) blocksInLine--;
+            }
+            if(blocksInLine == 0)
+            {
+               linesToClear[y] = true;
+            }           
+        }
+        ClearLine();
+        RedrawAll();
+    }
+    function ClearLine()
+    {
+        for(var i = 0; i < 20; i++)
+        {
+            if(linesToClear[i])
+            {
+                RemoveBlocksFormLine(i);
+                linesToClear[i] = false;
+            }
+        }
+        
+    }
+    function RemoveBlocksFormLine(_y)
+    {
+         for(var x = 0; x < 10; x++)
+         {
+             blocks[x+10*_y] = 0;
+         }
+         for(var y = _y; y > 0; y--)
+         {
+              for(var x = 0; x < 10; x++)
+              {
+                  blocks[x+10*y]     = blocks[x+10*(y-1)];
+                  blocks[x+10*(y-1)] = 0;
+              }
+              if(IsTopLine(y)) return;
+         }
+    }
+    function IsTopLine(_y)
+    {
+        for(var x = 0; x < 10; x++)
+        {
+            if(blocks[x+10*_y] >7) return false;
+        }
+        return true;
+    }
+    //===============================
     //Collision
     //===============================
     function CheckCollision(_x, _y)
     {
-        ApplyBlock(false);
-        var collision = CheckFloorAndWalls();
-        if(collision != "none") return collision;
-        RemoveBlock();
-        
         collision = CheckOtherBlocks(_x,_y);
-        if(collision != "none")   return collision;         
+        if(collision != "none")   return collision;      
+        
+        var collision = CheckFloorAndWalls(_x,_y);
+        if(collision != "none") return collision;
+
         return "none";
     }
-    
-    function CheckFloorAndWalls()
+    function CheckFloor(_x,_y)
     {
-        //Wallcheck
-        for(var y = 0; y < 19; y++ )
+         var blockstate   = 0;
+        var index=0;
+        for(var x = 0; x < 4; x++ )
         {
-           if(blocks[0 + 10*y] > 0 && blocks[0 + 10*y] < 8) return "wleft"; 
-           if(blocks[9 + 10*y] > 0 && blocks[9 + 10*y] < 8) return "wright"; 
-        }
-        for(var x=0; x <10; x++)
+            index = (_x+x)+10*19;
+            blockstate =  blocks[index];
+            if(blockstate > 0 && blockstate < 8)
+            { 
+                return "floor";
+            }
+        } 
+        return "none";
+    }
+    function CheckWalls(_x,_y)
+    {
+        var blockstate = 0;
+        var index      = 0;
+        for(var y = 0; y < 4; y++ )
         {
-           if(blocks[x + 10*19] > 0 && blocks[x + 10*19] < 8) return "floor"; 
+            index = 0+10*(_y+y);
+            blockstate =  blocks[index];
+            if(blockstate > 0)
+            { 
+                return "wleft";
+            }
         }
+        //rightwallCheck
+        for(var y = 0; y < 4; y++ )
+        {
+            index = 9+10*(_y+y);
+            blockstate =  blocks[index];
+            if(blockstate > 0)
+            { 
+                return "wright";
+            }
+        }
+        return "none";
+    }
+    function CheckFloorAndWalls(_x,_y)
+    {
+        var collision = CheckFloor(_x,_y); 
+        if(collision != "none") return collision;
+        
+        collision = CheckWalls(_x,_y);       
+        if(collision != "none") return collision;
+        
         return "none";
     }
     
@@ -230,20 +377,26 @@ $(document).ready(function()
     {
          var arraytoApply = currentBlock.getGrid(currentRotation);
          var blockstate = 0;
+         var blockstate2 = 0;
          var currentArrayValue = 0;
+         var index  = 0;
+         var index2 = 0;
          for(var y = 0; y < 4; y++ )
          {
             for(var x = 0; x < 4; x++ )
             {
-                currentArrayValue = arraytoApply[x+4*y]
-                blockstate = blocks[(_x+x)+10*(_y+y)] + currentArrayValue;
-                if(blockstate > currentArrayValue)
+                index2=(_x+x)+10*(_y+y);
+                index =(_x+x)+10*(_y+(y+1));
+                console.log(index);
+                console.log(index2);
+                blockstate = blocks[index];
+                blockstate2 = blocks[index2];
+                if(blockstate > 7 && blockstate2 < 8 && blockstate2 > 0)
                 { 
                     return "block";
                 }
-            }    
-         }
-        
+            }
+         }           
          return "none";
     }
     //===============================
@@ -252,7 +405,6 @@ $(document).ready(function()
     function BlockGrid( passive)
     {         
          RemoveBlock();
-         MoveBlockDown();
          ApplyBlock(false);   
     }
     function RemoveBlock()
@@ -297,12 +449,13 @@ $(document).ready(function()
         if(currentBlocktime <= 0)
         {            
             currentBlockXY[1]++; 
-            var collision = CheckCollision(currentBlockXY[0],currentBlockXY[1]);       
+            var collision = CheckCollision(currentBlockXY[0],currentBlockXY[1]); 
+            console.log(collision);      
             if(collissionFloor == true)
             {
                 currentBlockXY[1]--;
                 collissionFloor = false;
-                BlockGrid(true);
+                ApplyBlock(true);
                 currentBlock = null;
                 SpawnBlock();
                 return;
@@ -316,6 +469,7 @@ $(document).ready(function()
             }
             currentBlock.setPosition(currentBlockXY[0],currentBlockXY[1]);  
             currentBlocktime = blocktimer;
+            GameOver(currentBlockXY[0],currentBlockXY[1]);
         }
     }
     function SpawnBlock()
@@ -349,7 +503,9 @@ $(document).ready(function()
                     
             } 
         }
-       currentBlocktime = 0;
+        currentBlockXY=[3,0];
+        
+       currentBlocktime = 1000;
     }
     // ====
     function LineBlock(x,y,color)
